@@ -1,0 +1,72 @@
+# Render Blueprint for the Vibe Kanban backend (crates/remote).
+#
+# Topology:
+#   Browser ──> Vercel (packages/remote-web, static SPA)
+#                 └─ /v1/*  rewrite ──> this Render service (Rust API)
+#                                         ├─ Supabase Postgres (session pooler, IPv4)
+#                                         └─ ElectricSQL (realtime sync)
+#
+# See docs/deploy-vercel-supabase.md for the step-by-step guide.
+# Variables marked `sync: false` are prompted for when the Blueprint is created.
+services:
+  - type: web
+    name: vibe-kanban-api-khanhle43
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./crates/remote/Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /v1/health
+    autoDeploy: true
+    buildFilter:
+      paths:
+        - crates/remote/**
+        - crates/api-types/**
+        - crates/relay-types/**
+        - crates/utils/**
+        - packages/**
+        - shared/**
+        - Cargo.toml
+        - render.yaml
+    envVars:
+      - key: RUST_LOG
+        value: info,remote=info
+      - key: PORT
+        value: "10000"
+
+      # Supabase "Session pooler" connection string (IPv4 — Render has no IPv6).
+      # postgresql://postgres.<project-ref>:<db-password>@aws-<n>-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require
+      - key: SERVER_DATABASE_URL
+        sync: false
+
+      # Public URL users open in the browser (the Vercel domain). OAuth callbacks
+      # are built from it: <url>/v1/oauth/github/callback
+      - key: SERVER_PUBLIC_BASE_URL
+        value: https://vibe-kanban-khanhle43.vercel.app
+
+      # Must be standard base64 that decodes to >= 32 bytes: `openssl rand -base64 48`
+      - key: VIBEKANBAN_REMOTE_JWT_SECRET
+        sync: false
+
+      # ElectricSQL endpoint.
+      #  - Electric Cloud: https://api.electric-sql.cloud?source_id=<SOURCE_ID>
+      #  - Self-hosted Electric: https://<your-electric-host>
+      - key: ELECTRIC_URL
+        sync: false
+      # Electric Cloud source secret (or ELECTRIC_SECRET of a self-hosted Electric).
+      - key: ELECTRIC_SECRET
+        sync: false
+      # Password applied to the `electric_sync` replication role on startup.
+      - key: ELECTRIC_ROLE_PASSWORD
+        generateValue: true
+
+      # GitHub OAuth App (callback: <SERVER_PUBLIC_BASE_URL>/v1/oauth/github/callback)
+      - key: GITHUB_OAUTH_CLIENT_ID
+        sync: false
+      - key: GITHUB_OAUTH_CLIENT_SECRET
+        sync: false
+
+      - key: DIGEST_ENABLED
+        value: "false"
+      - key: REVIEW_DISABLED
+        value: "true"
