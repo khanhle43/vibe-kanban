@@ -108,6 +108,18 @@ pub(crate) async fn proxy_table(
     // Add Vary header for proper caching with auth
     headers.insert(header::VARY, HeaderValue::from_static("Authorization"));
 
+    // Shape responses are per-user. When the API is fronted by a shared CDN
+    // (e.g. a Vercel rewrite to this server), make sure the CDN never caches
+    // them; browsers still honour Electric's own Cache-Control header.
+    headers.insert(
+        header::HeaderName::from_static("cdn-cache-control"),
+        HeaderValue::from_static("no-store"),
+    );
+    headers.insert(
+        header::HeaderName::from_static("vercel-cdn-cache-control"),
+        HeaderValue::from_static("no-store"),
+    );
+
     // Stream the response body directly without buffering
     let body_stream = response.bytes_stream().map_err(std::io::Error::other);
     let body = Body::from_stream(body_stream);
